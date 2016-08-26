@@ -26,21 +26,25 @@ func init() {
 func validateFlags() bool {
 	if master && slave {
 		fmt.Println("Cannot be both master and slave node")
+		usage()
 		return false
 	} else if !master && !slave {
 		fmt.Println("Program must be run with either -m (master) or -s (slave)")
+		usage()
 		return false
 	}
 
 	if address == "" {
 		fmt.Println("You must provide an ip:port with -addr")
 		fmt.Println("eg. ./berkeley [-m or -s] -addr=123.123.123.123:1337")
+		usage()
 		return false
 	}
 
 	if master && slavesFile == "" {
 		fmt.Println("You must provide a json file containing a list of slave nodes with -slaves")
 		fmt.Println("eg ./berkeley -m -addr=0.0.0.0:0 -slaves=slaves.json")
+		usage()
 		return false
 	}
 
@@ -82,4 +86,16 @@ func parseSlaves() []string {
 	}
 
 	return slaves
+}
+
+func usage() {
+	fmt.Println(`
+Usage: ./berkeley (-m or -s) -addr=0.0.0.0:0 [-slaves=slavesJsonFile.json]
+  -m      Run program as master node that will compute the synchronization algorithm
+  -s      Run program as slave node that will listen for requests from the master node 
+          for its current time, and receives a synchronization value
+  -addr   IP:Port string for the program to run under eg. "-addr=127.0.0.1:1337"
+  -slaves Name of json file containing the list of slaves nodes addresses
+          Must be used with -m
+	`)
 }
