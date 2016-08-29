@@ -2,6 +2,12 @@
 
 Distributed clock synchronization with the Berkeley algorithm.
 
+
+To build
+```
+go build
+```
+
 ```
 Usage: ./berkeley (-m or -s) -addr=0.0.0.0:0 [-slaves=slavesJsonFile.json]
   -m      Run program as master node that will compute the synchronization algorithm

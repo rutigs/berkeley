@@ -36,7 +36,8 @@ func validateFlags() bool {
 
 	if address == "" {
 		fmt.Println("You must provide an ip:port with -addr")
-		fmt.Println("eg. ./berkeley [-m or -s] -addr=123.123.123.123:1337")
+		fmt.Println("eg. ./berkeley -s -addr=123.123.123.123:1337")
+		fmt.Println("eg. ./berkeley -m -addr=:1337")
 		usage()
 		return false
 	}
@@ -98,4 +99,13 @@ Usage: ./berkeley (-m or -s) -addr=0.0.0.0:0 [-slaves=slavesJsonFile.json]
   -slaves Name of json file containing the list of slaves nodes addresses
           Must be used with -m
 	`)
+}
+
+func checkError(isFatal bool, err error) {
+	if err != nil {
+		if isFatal {
+			log.Fatal(err)
+		}
+		fmt.Println(err)
+	}
 }
