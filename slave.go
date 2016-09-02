@@ -10,6 +10,7 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"math/rand"
 	"net"
 	"strings"
 	"time"
@@ -28,6 +29,9 @@ func runSlave(address string) {
 
 	var delta int64
 
+	// This rng added is for testing locally
+	rand.Seed(time.Now().UTC().UnixNano())
+
 	for {
 		fmt.Printf("Listening at %v\n", serverAddr)
 		readBuf := make([]byte, 1024)
@@ -37,7 +41,9 @@ func runSlave(address string) {
 			continue
 		}
 
-		now := time.Now().Unix()
+		randomTime := time.Duration(rand.Intn(600)) * time.Second
+		fmt.Printf("%v random seconds added\n", randomTime)
+		now := time.Now().Add(randomTime).Unix()
 		fmt.Printf("Before adjustment: %v\n", time.Unix(now+delta, 0))
 
 		msg := strings.TrimSpace(string(readBuf[:n]))

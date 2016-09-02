@@ -25,9 +25,8 @@ func runMaster(address string, slavesList []string) {
 	checkError(true, err)
 	defer sock.Close()
 
-	slaveNodes := make([]slaveNode, len(slavesList))
+	slaveNodes := make([]*slaveNode, len(slavesList))
 
-	var masterDelta int64
 	for {
 		for i, slaveAddr := range slavesList {
 			tempNodeAddr, err := net.ResolveUDPAddr("udp", slaveAddr)
@@ -35,20 +34,20 @@ func runMaster(address string, slavesList []string) {
 				fmt.Println(err)
 				continue
 			}
-			slaveNodes[i] = slaveNode{addr: tempNodeAddr}
+			slaveNodes[i] = &slaveNode{addr: tempNodeAddr}
 		}
 
 		// Poll all slave nodes for their time
-		now := time.Now().Unix()
-		fmt.Printf("Before adjustment: %v\n", time.Unix(now+masterDelta, 0))
+		masterDelta := time.Now().Unix()
+		fmt.Printf("Before adjustment: %v\n", time.Unix(masterDelta, 0))
 		slaveResponses := pollSlaves(slaveNodes, sock)
 
 		// Compute the algorithm for nodes that have responded
-		masterDelta = berkeleyTime(now, slaveResponses, slaveNodes)
-		fmt.Printf("After adjustment: %v\n", time.Unix(now+masterDelta, 0))
+		masterDelta = berkeleyTime(masterDelta, slaveResponses, slaveNodes)
+		fmt.Printf("After adjustment: %v\n", time.Unix(masterDelta, 0))
 
 		// Send the nodes their new time deltas
-		//tellTheSlaves(slaveNodes, sock)
+		tellTheSlaves(slaveNodes, sock)
 		// Sleep
 		time.Sleep(5 * time.Second)
 	}
@@ -65,13 +64,13 @@ type slaveResponse struct {
 	timeTicks int64
 }
 
-func pollSlaves(slaves []slaveNode, masterSock *net.UDPConn) chan slaveResponse {
+func pollSlaves(slaves []*slaveNode, masterSock *net.UDPConn) chan slaveResponse {
 	res := make(chan slaveResponse, len(slaves))
 	for _, slave := range slaves {
-		masterSock.WriteToUDP([]byte("gimme yo time"), slave.addr)
-		go func() {
+		masterSock.WriteToUDP([]byte("Master requesting slave time"), slave.addr)
+		go func(address *net.UDPAddr) {
 			buf := make([]byte, 1024)
-			fmt.Println("Making request to ", slave.addr)
+			fmt.Println("Making request to ", address)
 			n, addr, err := masterSock.ReadFromUDP(buf)
 			if err != nil {
 				fmt.Println(err)
@@ -84,14 +83,14 @@ func pollSlaves(slaves []slaveNode, masterSock *net.UDPConn) chan slaveResponse 
 				return
 			}
 			fmt.Printf("Received %v from %v\n", time.Unix(ticks, 0), addr)
-			res <- slaveResponse{addr: addr, timeTicks: ticks}
-		}()
+			res <- slaveResponse{addr: address, timeTicks: ticks}
+		}(slave.addr)
 	}
 
 	return res
 }
 
-func berkeleyTime(now int64, slaveResponses chan slaveResponse, slaves []slaveNode) int64 {
+func berkeleyTime(now int64, slaveResponses chan slaveResponse, slaves []*slaveNode) int64 {
 	totalTime := now
 
 	timeouts := make(chan bool, len(slaves))
@@ -103,22 +102,29 @@ func berkeleyTime(now int64, slaveResponses chan slaveResponse, slaves []slaveNo
 	}
 
 	var responses []slaveResponse
-	numResponses := 1
 	for _ = range slaves {
 		select {
 		case <-timeouts:
 			break
 		case res := <-slaveResponses:
 			responses = append(responses, res)
-			numResponses++
+			break
 		}
 	}
 
-	for _, nodeRes := range responses {
-		totalTime += nodeRes.timeTicks
-		for _, node := range slaves {
-			if node.addr == nodeRes.addr {
-				node.timeTicks = nodeRes.timeTicks
+	numResponses := 1
+	fmt.Printf("%v - Master\n", time.Unix(totalTime, 0))
+	for i, nodeRes := range responses {
+		if nodeRes.timeTicks != 0 {
+			numResponses++
+
+			fmt.Printf("%v - Slave #%v\n", time.Unix(nodeRes.timeTicks, 0), i)
+
+			totalTime += nodeRes.timeTicks
+			for _, node := range slaves {
+				if node.addr.String() == nodeRes.addr.String() {
+					node.timeTicks = nodeRes.timeTicks
+				}
 			}
 		}
 	}
@@ -126,9 +132,12 @@ func berkeleyTime(now int64, slaveResponses chan slaveResponse, slaves []slaveNo
 	// TODO throw out outliers
 
 	// 1 response is only master
+	fmt.Printf("%v node(s) responded.\n", numResponses-1)
 	var masterDelta int64
 	if numResponses > 1 {
 		masterDelta = totalTime / int64(numResponses)
+	} else {
+		masterDelta = now
 	}
 
 	for _, node := range slaves {
@@ -136,4 +145,18 @@ func berkeleyTime(now int64, slaveResponses chan slaveResponse, slaves []slaveNo
 	}
 
 	return masterDelta
+}
+
+func tellTheSlaves(slaves []*slaveNode, sock *net.UDPConn) {
+	for _, node := range slaves {
+		writeBuf := make([]byte, 1024)
+		bytes := binary.PutVarint(writeBuf, node.delta)
+		if bytes <= 0 {
+			fmt.Println("Error encoding the node's delta")
+			continue
+		}
+
+		fmt.Println("Making request to ", node.addr)
+		sock.WriteToUDP(writeBuf, node.addr)
+	}
 }
