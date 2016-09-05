@@ -27,3 +27,13 @@ The Slaves file will look something like this
   "127.0.0.1:1236",
   ...
 ]
+```
+
+# docker
+
+To build and run
+```
+sudo docker build -t berkeley .
+sudo docker run -it --rm -p 127.0.0.1:1337:8080 --name BERKELEY -t berkeley -m -addr=127.0.0.1:1337 -slaves=/go/src/github.com/rutigs/berkeley/slaves.json
+
+```
